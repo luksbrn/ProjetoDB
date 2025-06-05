@@ -6,17 +6,23 @@ from typing import List
 import logging
 from contextlib import asynccontextmanager
 
-# Configuração de logging
+#--------------------------------------------------------
+
+# tem que alterar as infos aqui pra rodar em outra máquina
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+from urllib.parse import quote_plus
+password = "123456"
+DATABASE_URL = f"postgresql+psycopg2://postgres:{quote_plus(password)}@localhost:5432/postgres"
 
-# Configuração do SQLite
-DATABASE_URL = "sqlite:///./messages.db"
+# tem que alterar as infos aqui----------^^^^^^^^^^^---------pra rodar em outra máquina
+
+#--------------------------------------------------------
 
 engine = create_engine(
-    DATABASE_URL, 
-    connect_args={"check_same_thread": False},
-    echo=True  # Mostra logs das queries SQL
+    DATABASE_URL,
+    echo=True
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -53,7 +59,7 @@ class MessageResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Código de startup
+    
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Tabelas criadas com sucesso!")
@@ -61,7 +67,7 @@ async def lifespan(app: FastAPI):
         logger.error(f"Erro ao criar tabelas: {e}")
         raise
     yield
-    # Código de shutdown (se necessário)
+    
 
 app = FastAPI(lifespan=lifespan)
 
@@ -84,7 +90,14 @@ def create_message(message: MessageCreate, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(db_message)
         logger.info(f"Mensagem criada com ID: {db_message.message_id}")
-        return db_message
+        
+        return {
+            "message_id": db_message.message_id,
+            "message": db_message.message,
+            "user_id_send": db_message.user_id_send,
+            "user_id_receive": db_message.user_id_receive,
+            "timestamp": db_message.timestamp.isoformat()
+        }
     except Exception as e:
         db.rollback()
         logger.error(f"Erro ao criar mensagem: {e}")
@@ -106,7 +119,13 @@ def read_messages(user_id_send: int, user_id_receive: int, db: Session = Depends
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Nenhuma mensagem encontrada"
             )
-        return messages
+        return [
+            MessageResponse.model_validate({
+                **m.__dict__,
+                "timestamp": m.timestamp.isoformat()
+            })
+            for m in messages
+        ]
     except Exception as e:
         logger.error(f"Erro ao buscar mensagens: {e}")
         raise HTTPException(
