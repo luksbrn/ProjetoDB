@@ -1,6 +1,5 @@
 fastapi
 uvicorn
 sqlalchemy
-psycopg2-binary  # For PostgreSQL
-# mysql-connector-python  # Uncomment for MySQL
+psycopg2-binary  
 pydantic
